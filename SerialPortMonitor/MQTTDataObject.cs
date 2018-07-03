@@ -9,7 +9,7 @@ namespace SerialPortMonitor
     public class MQTTDataObject
     {
         public DateTime tid { get; set; }
-        public int seg_id { get; set; }
+        public string seg_id { get; set; }
         public string seg_data { get; set; }
     }
 }

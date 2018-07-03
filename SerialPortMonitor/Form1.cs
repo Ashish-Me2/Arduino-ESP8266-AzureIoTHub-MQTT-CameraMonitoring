@@ -24,6 +24,7 @@ namespace SerialPortMonitor
         Button startButton = null;
         Button stopButton = null;
         string imgPath = null;
+        StringBuilder Base64StringSegments = new StringBuilder();
 
         public Form1()
         {
@@ -74,8 +75,6 @@ namespace SerialPortMonitor
             }
             monitorPort = new SerialPort(selectedPortName);
             SetupPortProps(monitorPort);
-
-
         }
 
         private void MonitorPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
@@ -88,23 +87,23 @@ namespace SerialPortMonitor
 
                 SerialPort senderPort = (SerialPort)sender;
                 string indata = senderPort.ReadLine();
+                ProcessJsonSegments(indata, Base64StringSegments);
                 Debug.Write(indata);
 
                 return;
             }
             
-
-            byte[] completeDataArray = new byte[3000];
-            if (monitorPort.BytesToRead > 0)
-            {
-                byte[] inbyte = new byte[1];
-                monitorPort.Read(inbyte, 0, 1);
-                if (inbyte.Length > 0)
-                {
-                    byte value = (byte)inbyte.GetValue(0);
-                    //do other necessary processing you may want. 
-                }
-            }
+            //byte[] completeDataArray = new byte[3000];
+            //if (monitorPort.BytesToRead > 0)
+            //{
+            //    byte[] inbyte = new byte[1];
+            //    monitorPort.Read(inbyte, 0, 1);
+            //    if (inbyte.Length > 0)
+            //    {
+            //        byte value = (byte)inbyte.GetValue(0);
+            //        //do other necessary processing you may want. 
+            //    }
+            //}
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -175,9 +174,23 @@ namespace SerialPortMonitor
             File.WriteAllBytes(Path.Combine(fInfo.Directory.ToString(), "proc", "encoded.jpg"), GetBase64DecodedData(File.ReadAllText(Path.Combine(fInfo.Directory.ToString(), "proc", "encoded.txt"))));
         }
 
-        private void ProcessJsonSegments(string rawDataReceived)
+        private void ProcessJsonSegments(string rawDataReceived, StringBuilder Base64StringSegmentsInt)
         {
             MQTTDataObject obj = (MQTTDataObject)JsonConvert.DeserializeObject(rawDataReceived);
+            if (obj.seg_id.Equals("-START-", StringComparison.CurrentCultureIgnoreCase))
+            {
+                Base64StringSegmentsInt.Clear();
+            }
+            else if (obj.seg_id.Equals("-PART-", StringComparison.CurrentCultureIgnoreCase))
+            {
+                Base64StringSegmentsInt.Append(obj.seg_data);
+            }
+            else if (obj.seg_id.Equals("-END-", StringComparison.CurrentCultureIgnoreCase))
+            {
+                //write the data to output device
+                byte[] Data = GetBase64DecodedData(Base64StringSegmentsInt.ToString());
+                File.WriteAllBytes("reconstructed.jpg", Data);
+            }
         }
     }
 }
