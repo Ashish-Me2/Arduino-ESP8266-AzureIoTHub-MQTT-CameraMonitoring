@@ -86,10 +86,14 @@ namespace SerialPortMonitor
                 }));
 
                 SerialPort senderPort = (SerialPort)sender;
-                string indata = senderPort.ReadLine();
-                ProcessJsonSegments(indata, Base64StringSegments);
-                Debug.Write(indata);
+                int inBuf = senderPort.ReadBufferSize;
+                //string indata = senderPort.();
+                //ProcessJsonSegments(indata, Base64StringSegments);
+                //while (senderPort.ReadByte()>0)
+                //{
 
+                //}
+                Debug.Write(senderPort.ReadExisting());
                 return;
             }
             
@@ -176,21 +180,22 @@ namespace SerialPortMonitor
 
         private void ProcessJsonSegments(string rawDataReceived, StringBuilder Base64StringSegmentsInt)
         {
-            MQTTDataObject obj = (MQTTDataObject)JsonConvert.DeserializeObject(rawDataReceived);
-            if (obj.seg_id.Equals("-START-", StringComparison.CurrentCultureIgnoreCase))
-            {
-                Base64StringSegmentsInt.Clear();
-            }
-            else if (obj.seg_id.Equals("-PART-", StringComparison.CurrentCultureIgnoreCase))
-            {
-                Base64StringSegmentsInt.Append(obj.seg_data);
-            }
-            else if (obj.seg_id.Equals("-END-", StringComparison.CurrentCultureIgnoreCase))
-            {
-                //write the data to output device
-                byte[] Data = GetBase64DecodedData(Base64StringSegmentsInt.ToString());
-                File.WriteAllBytes("reconstructed.jpg", Data);
-            }
+            Debug.Print(rawDataReceived);
+            //MQTTDataObject obj = (MQTTDataObject)JsonConvert.DeserializeObject(rawDataReceived);
+            //if (obj.seg_id.Equals("-START-", StringComparison.CurrentCultureIgnoreCase))
+            //{
+            //    Base64StringSegmentsInt.Clear();
+            //}
+            //else if (obj.seg_id.Equals("-PART-", StringComparison.CurrentCultureIgnoreCase))
+            //{
+            //    Base64StringSegmentsInt.Append(obj.seg_data);
+            //}
+            //else if (obj.seg_id.Equals("-END-", StringComparison.CurrentCultureIgnoreCase))
+            //{
+            //    //write the data to output device
+            //    byte[] Data = GetBase64DecodedData(Base64StringSegmentsInt.ToString());
+            //    File.WriteAllBytes("reconstructed.jpg", Data);
+            //}
         }
     }
 }
