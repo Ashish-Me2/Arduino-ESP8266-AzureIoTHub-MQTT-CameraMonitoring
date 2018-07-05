@@ -572,7 +572,7 @@ void StringPgm(const char * str) {
 static void captureImg(uint16_t wg, uint16_t hg) {
 	uint16_t y, x;
 
-	StringPgm(PSTR("*RDY*"));
+	StringPgm(PSTR("AM"));
 
 	while (!(PIND & 8));//wait for high
 	while ((PIND & 8));//wait for low
@@ -604,5 +604,6 @@ void setup() {
 
 
 void loop() {
-	captureImg(320, 240);
+	captureImg(160,120);
+	Serial.println("*--------------------------------------------------*");
 }
