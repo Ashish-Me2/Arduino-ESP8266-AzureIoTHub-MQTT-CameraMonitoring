@@ -11,6 +11,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "AzureClient", "AzureClient\
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MQTTPubSub", "MQTTPubSub\MQTTPubSub.vcxproj", "{C5F80730-F44F-4478-BDAE-6634EFC2CA88}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ProximitySensor", "ProximitySensor\ProximitySensor.vcxproj", "{4253A2E8-B5BE-44CE-A318-6F0AB1E619EB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -74,6 +76,16 @@ Global
 		{C5F80730-F44F-4478-BDAE-6634EFC2CA88}.Release|x64.ActiveCfg = Release|Win32
 		{C5F80730-F44F-4478-BDAE-6634EFC2CA88}.Release|x86.ActiveCfg = Release|Win32
 		{C5F80730-F44F-4478-BDAE-6634EFC2CA88}.Release|x86.Build.0 = Release|Win32
+		{4253A2E8-B5BE-44CE-A318-6F0AB1E619EB}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{4253A2E8-B5BE-44CE-A318-6F0AB1E619EB}.Debug|ARM.ActiveCfg = Debug|Win32
+		{4253A2E8-B5BE-44CE-A318-6F0AB1E619EB}.Debug|x64.ActiveCfg = Debug|Win32
+		{4253A2E8-B5BE-44CE-A318-6F0AB1E619EB}.Debug|x86.ActiveCfg = Debug|Win32
+		{4253A2E8-B5BE-44CE-A318-6F0AB1E619EB}.Debug|x86.Build.0 = Debug|Win32
+		{4253A2E8-B5BE-44CE-A318-6F0AB1E619EB}.Release|Any CPU.ActiveCfg = Release|Win32
+		{4253A2E8-B5BE-44CE-A318-6F0AB1E619EB}.Release|ARM.ActiveCfg = Release|Win32
+		{4253A2E8-B5BE-44CE-A318-6F0AB1E619EB}.Release|x64.ActiveCfg = Release|Win32
+		{4253A2E8-B5BE-44CE-A318-6F0AB1E619EB}.Release|x86.ActiveCfg = Release|Win32
+		{4253A2E8-B5BE-44CE-A318-6F0AB1E619EB}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
