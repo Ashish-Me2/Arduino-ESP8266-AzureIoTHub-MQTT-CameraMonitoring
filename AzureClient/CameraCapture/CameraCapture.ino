@@ -1,315 +1,46 @@
-//
-// Source code for application to transmit image from ov7670 to PC via USB
-// By Siarhei Charkes in 2015
-// http://privateblog.info 
-//
-
+#define F_CPU 16000000UL
 #include <stdint.h>
 #include <avr/io.h>
+#include <avr/interrupt.h>
 #include <util/twi.h>
 #include <util/delay.h>
 #include <avr/pgmspace.h>
+#include "ov7670.h"
 
-#define F_CPU 16000000UL
-#define vga 	0
-#define qvga 	1
-#define qqvga 	2
-#define yuv422 	0
-#define rgb565 	1
-#define bayerRGB 	2
-#define camAddr_WR	0x42
-#define camAddr_RD	0x43
-
-/* Registers */
-#define REG_GAIN		0x00	/* Gain lower 8 bits (rest in vref) */
-#define REG_BLUE		0x01	/* blue gain */
-#define REG_RED		    0x02	/* red gain */
-#define REG_VREF		0x03	/* Pieces of GAIN, VSTART, VSTOP */
-#define REG_COM1		0x04	/* Control 1 */
-#define COM1_CCIR656	0x40    /* CCIR656 enable */
-
-#define REG_BAVE		0x05	/* U/B Average level */
-#define REG_GbAVE		0x06	/* Y/Gb Average level */
-#define REG_AECHH		0x07	/* AEC MS 5 bits */
-#define REG_RAVE		0x08	/* V/R Average level */
-#define REG_COM2		0x09	/* Control 2 */
-#define COM2_SSLEEP	        0x10	/* Soft sleep mode */
-#define REG_PID		        0x0a	/* Product ID MSB */
-#define REG_VER		        0x0b	/* Product ID LSB */
-#define REG_COM3		0x0c	/* Control 3 */
-#define COM3_SWAP	        0x40	/* Byte swap */
-#define COM3_SCALEEN	        0x08	/* Enable scaling */
-#define COM3_DCWEN	        0x04	/* Enable downsamp/crop/window */
-#define REG_COM4		0x0d	/* Control 4 */
-#define REG_COM5		0x0e	/* All "reserved" */
-#define REG_COM6		0x0f	/* Control 6 */
-#define REG_AECH		0x10	/* More bits of AEC value */
-#define REG_CLKRC		0x11	/* Clocl control */
-#define CLK_EXT		        0x40	/* Use external clock directly */
-#define CLK_SCALE		0x3f	/* Mask for internal clock scale */
-#define REG_COM7		0x12	/* Control 7 */ //REG mean address.
-#define COM7_RESET	        0x80	/* Register reset */
-#define COM7_FMT_MASK	        0x38
-#define COM7_FMT_VGA	        0x00
-#define	COM7_FMT_CIF	        0x20	/* CIF format */
-#define COM7_FMT_QVGA	        0x10	/* QVGA format */
-#define COM7_FMT_QCIF	        0x08	/* QCIF format */
-#define	COM7_RGB	        0x04	/* bits 0 and 2 - RGB format */
-#define	COM7_YUV	        0x00	/* YUV */
-#define	COM7_BAYER	        0x01	/* Bayer format */
-#define	COM7_PBAYER	        0x05	/* "Processed bayer" */
-#define REG_COM8		0x13	/* Control 8 */
-#define COM8_FASTAEC	        0x80	/* Enable fast AGC/AEC */
-#define COM8_AECSTEP	        0x40	/* Unlimited AEC step size */
-#define COM8_BFILT		0x20	/* Band filter enable */
-#define COM8_AGC		0x04	/* Auto gain enable */
-#define COM8_AWB		0x02	/* White balance enable */
-#define COM8_AEC		0x01	/* Auto exposure enable */
-#define REG_COM9		0x14	/* Control 9- gain ceiling */
-#define REG_COM10		0x15	/* Control 10 */
-#define COM10_HSYNC	        0x40	/* HSYNC instead of HREF */
-#define COM10_PCLK_HB	        0x20	/* Suppress PCLK on horiz blank */
-#define COM10_HREF_REV	        0x08	/* Reverse HREF */
-#define COM10_VS_LEAD	        0x04	/* VSYNC on clock leading edge */
-#define COM10_VS_NEG	        0x02	/* VSYNC negative */
-#define COM10_HS_NEG	        0x01	/* HSYNC negative */
-#define REG_HSTART		0x17	/* Horiz start high bits */
-#define REG_HSTOP		0x18	/* Horiz stop high bits */
-#define REG_VSTART		0x19	/* Vert start high bits */
-#define REG_VSTOP		0x1a	/* Vert stop high bits */
-#define REG_PSHFT		0x1b	/* Pixel delay after HREF */
-#define REG_MIDH		0x1c	/* Manuf. ID high */
-#define REG_MIDL		0x1d	/* Manuf. ID low */
-#define REG_MVFP		0x1e	/* Mirror / vflip */
-#define MVFP_MIRROR	        0x20	/* Mirror image */
-#define MVFP_FLIP		0x10	/* Vertical flip */
-
-#define REG_AEW		        0x24	/* AGC upper limit */
-#define REG_AEB		        0x25  	/* AGC lower limit */
-#define REG_VPT		        0x26	/* AGC/AEC fast mode op region */
-#define REG_HSYST		0x30	/* HSYNC rising edge delay */
-#define REG_HSYEN		0x31	/* HSYNC falling edge delay */
-#define REG_HREF		0x32	/* HREF pieces */
-#define REG_TSLB		0x3a	/* lots of stuff */
-#define TSLB_YLAST		0x04	/* UYVY or VYUY - see com13 */
-#define REG_COM11		0x3b	/* Control 11 */
-#define COM11_NIGHT	        0x80	/* NIght mode enable */
-#define COM11_NMFR	        0x60	/* Two bit NM frame rate */
-#define COM11_HZAUTO	        0x10	/* Auto detect 50/60 Hz */
-#define	COM11_50HZ	        0x08	/* Manual 50Hz select */
-#define COM11_EXP		0x02
-#define REG_COM12		0x3c	/* Control 12 */
-#define COM12_HREF	        0x80	/* HREF always */
-#define REG_COM13		0x3d	/* Control 13 */
-#define COM13_GAMMA	        0x80	/* Gamma enable */
-#define	COM13_UVSAT	        0x40	/* UV saturation auto adjustment */
-#define COM13_UVSWAP	        0x01	/* V before U - w/TSLB */
-#define REG_COM14		0x3e	/* Control 14 */
-#define COM14_DCWEN	        0x10	/* DCW/PCLK-scale enable */
-#define REG_EDGE		0x3f	/* Edge enhancement factor */
-#define REG_COM15		0x40	/* Control 15 */
-#define COM15_R10F0	        0x00	/* Data range 10 to F0 */
-#define	COM15_R01FE	        0x80	/*			01 to FE */
-#define COM15_R00FF	        0xc0	/*			00 to FF */
-#define COM15_RGB565	        0x10	/* RGB565 output */
-#define COM15_RGB555	        0x30	/* RGB555 output */
-#define REG_COM16		0x41	/* Control 16 */
-#define COM16_AWBGAIN	        0x08	/* AWB gain enable */
-#define REG_COM17		0x42	/* Control 17 */
-#define COM17_AECWIN	        0xc0	/* AEC window - must match COM4 */
-#define COM17_CBAR	        0x08	/* DSP Color bar */
-/*
-* This matrix defines how the colors are generated, must be
-* tweaked to adjust hue and saturation.
-*
-* Order: v-red, v-green, v-blue, u-red, u-green, u-blue
-* They are nine-bit signed quantities, with the sign bit
-* stored in0x58.Sign for v-red is bit 0, and up from there.
-*/
-#define	REG_CMATRIX_BASE	0x4f
-#define CMATRIX_LEN 	        6
-#define REG_CMATRIX_SIGN	0x58
-#define REG_BRIGHT		0x55	/* Brightness */
-#define REG_CONTRAS	        0x56	/* Contrast control */
-#define REG_GFIX		0x69	/* Fix gain control */
-#define REG_REG76		0x76	/* OV's name */
-#define R76_BLKPCOR	        0x80	/* Black pixel correction enable */
-#define R76_WHTPCOR	        0x40	/* White pixel correction enable */
-#define REG_RGB444	        0x8c	/* RGB 444 control */
-#define R444_ENABLE	        0x02	/* Turn on RGB444, overrides 5x5 */
-#define R444_RGBX		0x01	/* Empty nibble at end */
-#define REG_HAECC1		0x9f	/* Hist AEC/AGC control 1 */
-#define REG_HAECC2		0xa0	/* Hist AEC/AGC control 2 */
-#define REG_BD50MAX	        0xa5	/* 50hz banding step limit */
-#define REG_HAECC3		0xa6	/* Hist AEC/AGC control 3 */
-#define REG_HAECC4		0xa7	/* Hist AEC/AGC control 4 */
-#define REG_HAECC5		0xa8	/* Hist AEC/AGC control 5 */
-#define REG_HAECC6		0xa9	/* Hist AEC/AGC control 6 */
-#define REG_HAECC7		0xaa	/* Hist AEC/AGC control 7 */
-#define REG_BD60MAX	        0xab	/* 60hz banding step limit */
-#define REG_GAIN		0x00	/* Gain lower 8 bits (rest in vref) */
-#define REG_BLUE		0x01	/* blue gain */
-#define REG_RED		        0x02	/* red gain */
-#define REG_VREF		0x03	/* Pieces of GAIN, VSTART, VSTOP */
-#define REG_COM1		0x04	/* Control 1 */
-#define COM1_CCIR656	        0x40	/* CCIR656 enable */
-#define REG_BAVE		0x05	/* U/B Average level */
-#define REG_GbAVE		0x06	/* Y/Gb Average level */
-#define REG_AECHH		0x07	/* AEC MS 5 bits */
-#define REG_RAVE		0x08	/* V/R Average level */
-#define REG_COM2		0x09	/* Control 2 */
-#define COM2_SSLEEP	        0x10	/* Soft sleep mode */
-#define REG_PID		        0x0a	/* Product ID MSB */
-#define REG_VER		        0x0b	/* Product ID LSB */
-#define REG_COM3		0x0c	/* Control 3 */
-#define COM3_SWAP	        0x40	/* Byte swap */
-#define COM3_SCALEEN	        0x08	/* Enable scaling */
-#define COM3_DCWEN	        0x04	/* Enable downsamp/crop/window */
-#define REG_COM4		0x0d	/* Control 4 */
-#define REG_COM5		0x0e	/* All "reserved" */
-#define REG_COM6		0x0f	/* Control 6 */
-#define REG_AECH		0x10	/* More bits of AEC value */
-#define REG_CLKRC		0x11	/* Clocl control */
-#define CLK_EXT		        0x40	/* Use external clock directly */
-#define CLK_SCALE		0x3f	/* Mask for internal clock scale */
-#define REG_COM7		0x12	/* Control 7 */
-#define COM7_RESET	        0x80	/* Register reset */
-#define COM7_FMT_MASK	        0x38
-#define COM7_FMT_VGA	        0x00
-#define COM7_FMT_CIF	        0x20	/* CIF format */
-#define COM7_FMT_QVGA	        0x10	/* QVGA format */
-#define COM7_FMT_QCIF	        0x08	/* QCIF format */
-#define COM7_RGB		0x04	/* bits 0 and 2 - RGB format */
-#define COM7_YUV		0x00	/* YUV */
-#define COM7_BAYER	        0x01	/* Bayer format */
-#define COM7_PBAYER	        0x05	/* "Processed bayer" */
-#define REG_COM8		0x13	/* Control 8 */
-#define COM8_FASTAEC	        0x80	/* Enable fast AGC/AEC */
-#define COM8_AECSTEP	        0x40	/* Unlimited AEC step size */
-#define COM8_BFILT		0x20	/* Band filter enable */
-#define COM8_AGC		0x04	/* Auto gain enable */
-#define COM8_AWB		0x02	/* White balance enable */
-#define COM8_AEC		0x01	/* Auto exposure enable */
-#define REG_COM9		0x14	/* Control 9- gain ceiling */
-#define REG_COM10		0x15	/* Control 10 */
-#define COM10_HSYNC	        0x40	/* HSYNC instead of HREF */
-#define COM10_PCLK_HB	        0x20	/* Suppress PCLK on horiz blank */
-#define COM10_HREF_REV	        0x08	/* Reverse HREF */
-#define COM10_VS_LEAD 	        0x04	/* VSYNC on clock leading edge */
-#define COM10_VS_NEG	        0x02	/* VSYNC negative */
-#define COM10_HS_NEG	        0x01	/* HSYNC negative */
-#define REG_HSTART		0x17	/* Horiz start high bits */
-#define REG_HSTOP		0x18	/* Horiz stop high bits */
-#define REG_VSTART		0x19	/* Vert start high bits */
-#define REG_VSTOP		0x1a	/* Vert stop high bits */
-#define REG_PSHFT		0x1b	/* Pixel delay after HREF */
-#define REG_MIDH		0x1c	/* Manuf. ID high */
-#define REG_MIDL		0x1d	/* Manuf. ID low */
-#define REG_MVFP		0x1e	/* Mirror / vflip */
-#define MVFP_MIRROR	        0x20	/* Mirror image */
-#define MVFP_FLIP		0x10	/* Vertical flip */
-#define REG_AEW		        0x24	/* AGC upper limit */
-#define REG_AEB		        0x25	/* AGC lower limit */
-#define REG_VPT		        0x26	/* AGC/AEC fast mode op region */
-#define REG_HSYST		0x30	/* HSYNC rising edge delay */
-#define REG_HSYEN		0x31	/* HSYNC falling edge delay */
-#define REG_HREF		0x32	/* HREF pieces */
-#define REG_TSLB		0x3a	/* lots of stuff */
-#define TSLB_YLAST		0x04	/* UYVY or VYUY - see com13 */
-#define REG_COM11		0x3b	/* Control 11 */
-#define COM11_NIGHT	        0x80	/* NIght mode enable */
-#define COM11_NMFR	        0x60	/* Two bit NM frame rate */
-#define COM11_HZAUTO	        0x10	/* Auto detect 50/60 Hz */
-#define COM11_50HZ	        0x08	/* Manual 50Hz select */
-#define COM11_EXP		0x02
-#define REG_COM12		0x3c	/* Control 12 */
-#define COM12_HREF	        0x80	/* HREF always */
-#define REG_COM13		0x3d	/* Control 13 */
-#define COM13_GAMMA	        0x80	/* Gamma enable */
-#define COM13_UVSAT	        0x40	/* UV saturation auto adjustment */
-#define COM13_UVSWAP	        0x01	/* V before U - w/TSLB */
-#define REG_COM14		0x3e	/* Control 14 */
-#define COM14_DCWEN	        0x10	/* DCW/PCLK-scale enable */
-#define REG_EDGE		0x3f	/* Edge enhancement factor */
-#define REG_COM15		0x40	/* Control 15 */
-#define COM15_R10F0	        0x00	/* Data range 10 to F0 */
-#define COM15_R01FE	        0x80	/*			01 to FE */
-#define COM15_R00FF	        0xc0	/*			00 to FF */
-#define COM15_RGB565	        0x10	/* RGB565 output */
-#define COM15_RGB555	        0x30	/* RGB555 output */
-#define REG_COM16		0x41	/* Control 16 */
-#define COM16_AWBGAIN	        0x08	/* AWB gain enable */
-#define REG_COM17		0x42	/* Control 17 */
-#define COM17_AECWIN	        0xc0	/* AEC window - must match COM4 */
-#define COM17_CBAR	        0x08	/* DSP Color bar */
-
-#define CMATRIX_LEN             6
-#define REG_BRIGHT		0x55	/* Brightness */
-#define REG_REG76		0x76	/* OV's name */
-#define R76_BLKPCOR	        0x80	/* Black pixel correction enable */
-#define R76_WHTPCOR	        0x40	/* White pixel correction enable */
-#define REG_RGB444	        0x8c	/* RGB 444 control */
-#define R444_ENABLE	        0x02	/* Turn on RGB444, overrides 5x5 */
-#define R444_RGBX		0x01	/* Empty nibble at end */
-#define REG_HAECC1		0x9f	/* Hist AEC/AGC control 1 */
-#define REG_HAECC2		0xa0	/* Hist AEC/AGC control 2 */
-#define REG_BD50MAX	        0xa5	/* 50hz banding step limit */
-#define REG_HAECC3		0xa6	/* Hist AEC/AGC control 3 */
-#define REG_HAECC4		0xa7	/* Hist AEC/AGC control 4 */
-#define REG_HAECC5		0xa8	/* Hist AEC/AGC control 5 */
-#define REG_HAECC6		0xa9	/* Hist AEC/AGC control 6 */
-#define REG_HAECC7		0xaa	/* Hist AEC/AGC control 7 */
-#define REG_BD60MAX	        0xab	/* 60hz banding step limit */
-#define MTX1		        0x4f	/* Matrix Coefficient 1 */
-#define MTX2		        0x50	/* Matrix Coefficient 2 */
-#define MTX3		        0x51	/* Matrix Coefficient 3 */
-#define MTX4		        0x52	/* Matrix Coefficient 4 */
-#define MTX5		        0x53	/* Matrix Coefficient 5 */
-#define MTX6		        0x54	/* Matrix Coefficient 6 */
-#define REG_CONTRAS	        0x56	/* Contrast control */
-#define MTXS		        0x58	/* Matrix Coefficient Sign */
-#define AWBC7		        0x59	/* AWB Control 7 */
-#define AWBC8		        0x5a	/* AWB Control 8 */
-#define AWBC9		        0x5b	/* AWB Control 9 */
-#define AWBC10		        0x5c	/* AWB Control 10 */
-#define AWBC11		        0x5d	/* AWB Control 11 */
-#define AWBC12		        0x5e	/* AWB Control 12 */
-#define REG_GFI		        0x69	/* Fix gain control */
-#define GGAIN		        0x6a	/* G Channel AWB Gain */
-#define DBLV		        0x6b	
-#define AWBCTR3		        0x6c	/* AWB Control 3 */
-#define AWBCTR2		        0x6d	/* AWB Control 2 */
-#define AWBCTR1		        0x6e	/* AWB Control 1 */
-#define AWBCTR0		        0x6f	/* AWB Control 0 */
-
-struct regval_list {
-	uint8_t reg_num;
-	uint16_t value;
+static const struct regval_list vga_ov7670[] PROGMEM = {
+	{ REG_HREF,0xF6 },	// was B6  
+{ 0x17,0x13 },		// HSTART
+{ 0x18,0x01 },		// HSTOP
+{ 0x19,0x02 },		// VSTART
+{ 0x1a,0x7a },		// VSTOP
+{ REG_VREF,0x0a },	// VREF
+{ 0xff, 0xff },		/* END MARKER */
 };
-
-const struct regval_list qvga_ov7670[] PROGMEM = {
+static const struct regval_list qvga_ov7670[] PROGMEM = {
 	{ REG_COM14, 0x19 },
 { 0x72, 0x11 },
 { 0x73, 0xf1 },
-
-{ REG_HSTART, 0x16 },
-{ REG_HSTOP, 0x04 },
-{ REG_HREF, 0xa4 },
-{ REG_VSTART, 0x02 },
-{ REG_VSTOP, 0x7a },
-{ REG_VREF, 0x0a },
-
-
-/*	{ REG_HSTART, 0x16 },
-{ REG_HSTOP, 0x04 },
-{ REG_HREF, 0x24 },
-{ REG_VSTART, 0x02 },
-{ REG_VSTOP, 0x7a },
-{ REG_VREF, 0x0a },*/
+{ REG_HSTART,0x16 },
+{ REG_HSTOP,0x04 },
+{ REG_HREF,0x24 },
+{ REG_VSTART,0x02 },
+{ REG_VSTOP,0x7a },
+{ REG_VREF,0x0a },
 { 0xff, 0xff },	/* END MARKER */
 };
-
-const struct regval_list yuv422_ov7670[] PROGMEM = {
+static const struct regval_list qqvga_ov7670[] PROGMEM = {
+	{ REG_COM14, 0x1a },	// divide by 4
+{ 0x72, 0x22 },		// downsample by 4
+{ 0x73, 0xf2 },		// divide by 4
+{ REG_HSTART,0x16 },
+{ REG_HSTOP,0x04 },
+{ REG_HREF,0xa4 },
+{ REG_VSTART,0x02 },
+{ REG_VSTOP,0x7a },
+{ REG_VREF,0x0a },
+{ 0xff, 0xff },	/* END MARKER */
+};
+static const struct regval_list yuv422_ov7670[] PROGMEM = {
 	{ REG_COM7, 0x0 },	/* Selects YUV mode */
 { REG_RGB444, 0 },	/* No RGB444 please */
 { REG_COM1, 0 },
@@ -321,13 +52,34 @@ const struct regval_list yuv422_ov7670[] PROGMEM = {
 { 0x52, 0x22 },		/* "matrix coefficient 4" */
 { 0x53, 0x5e },		/* "matrix coefficient 5" */
 { 0x54, 0x80 },		/* "matrix coefficient 6" */
-{ REG_COM13, COM13_UVSAT },
+{ REG_COM13,/*COM13_GAMMA|*/COM13_UVSAT },
 { 0xff, 0xff },		/* END MARKER */
 };
-
-const struct regval_list ov7670_default_regs[] PROGMEM = {//from the linux driver
+static const struct regval_list rgb565_ov7670[] PROGMEM = {
+	{ REG_COM7, COM7_RGB }, /* Selects RGB mode */
+{ REG_RGB444, 0 },	  /* No RGB444 please */
+{ REG_COM1, 0x0 },
+{ REG_COM15, COM15_RGB565 | COM15_R00FF },
+{ REG_COM9, 0x6A },	 /* 128x gain ceiling; 0x8 is reserved bit */
+{ 0x4f, 0xb3 },		 /* "matrix coefficient 1" */
+{ 0x50, 0xb3 },		 /* "matrix coefficient 2" */
+{ 0x51, 0 },		 /* vb */
+{ 0x52, 0x3d },		 /* "matrix coefficient 4" */
+{ 0x53, 0xa7 },		 /* "matrix coefficient 5" */
+{ 0x54, 0xe4 },		 /* "matrix coefficient 6" */
+{ REG_COM13, /*COM13_GAMMA|*/COM13_UVSAT },
+{ 0xff, 0xff },	/* END MARKER */
+};
+static const struct regval_list bayerRGB_ov7670[] PROGMEM = {
+	{ REG_COM7, COM7_BAYER },
+{ REG_COM13, 0x08 }, /* No gamma, magic rsvd bit */
+{ REG_COM16, 0x3d }, /* Edge enhancement, denoise */
+{ REG_REG76, 0xe1 }, /* Pix correction, magic rsvd */
+{ 0xff, 0xff },	/* END MARKER */
+};
+static const struct regval_list ov7670_default_regs[] PROGMEM = {//from the linux driver
 	{ REG_COM7, COM7_RESET },
-{ REG_TSLB, 0x04 },	/* OV */
+{ REG_TSLB,  0x04 },	/* OV */
 { REG_COM7, 0 },	/* VGA */
 					/*
 					* Set the hardware window.  These values from OV don't entirely
@@ -341,7 +93,7 @@ const struct regval_list ov7670_default_regs[] PROGMEM = {//from the linux drive
 /* Mystery scaling numbers */
 { 0x70, 0x3a },{ 0x71, 0x35 },
 { 0x72, 0x11 },{ 0x73, 0xf0 },
-{ 0xa2,/* 0x02 changed to 1*/1 },{ REG_COM10, 0x0 },
+{ 0xa2,/* 0x02 changed to 1*/1 },{ REG_COM10, COM10_VS_NEG },
 /* Gamma curve values */
 { 0x7a, 0x20 },{ 0x7b, 0x10 },
 { 0x7c, 0x1e },{ 0x7d, 0x35 },
@@ -365,8 +117,8 @@ then turn them only after tweaking the values. */
 { REG_HAECC5, 0xf0 },{ REG_HAECC6, 0x90 },
 { REG_HAECC7, 0x94 },
 { REG_COM8, COM8_FASTAEC | COM8_AECSTEP | COM8_AGC | COM8_AEC },
-{ 0x30, 0 },{ 0x31, 0 },//disable some delays
-						/* Almost all of these are magic "reserved" values.  */
+{ 0x30,0 },{ 0x31,0 },//disable some delays
+					  /* Almost all of these are magic "reserved" values.  */
 { REG_COM5, 0x61 },{ REG_COM6, 0x4b },
 { 0x16, 0x02 },{ REG_MVFP, 0x07 },
 { 0x21, 0x02 },{ 0x22, 0x91 },
@@ -375,7 +127,7 @@ then turn them only after tweaking the values. */
 { 0x38, 0x71 },{ 0x39, 0x2a },
 { REG_COM12, 0x78 },{ 0x4d, 0x40 },
 { 0x4e, 0x20 },{ REG_GFIX, 0 },
-/*{0x6b, 0x4a},*/{ 0x74, 0x10 },
+/*{0x6b, 0x4a},*/{ 0x74,0x10 },
 { 0x8d, 0x4f },{ 0x8e, 0 },
 { 0x8f, 0 },{ 0x90, 0 },
 { 0x91, 0 },{ 0x96, 0 },
@@ -430,113 +182,217 @@ then turn them only after tweaking the values. */
 { 0x79, 0x03 },{ 0xc8, 0x40 },
 { 0x79, 0x05 },{ 0xc8, 0x30 },
 { 0x79, 0x26 },
+
 { 0xff, 0xff },	/* END MARKER */
 };
-
-
-void error_led(void) {
+static void errorLed(void) {
 	DDRB |= 32;//make sure led is output
 	while (1) {//wait for reset
 		PORTB ^= 32;// toggle led
 		_delay_ms(100);
 	}
 }
-
-void twiStart(void) {
+static void twiStart(void) {
 	TWCR = _BV(TWINT) | _BV(TWSTA) | _BV(TWEN);//send start
 	while (!(TWCR & (1 << TWINT)));//wait for start to be transmitted
 	if ((TWSR & 0xF8) != TW_START)
-		error_led();
+		errorLed();
 }
-
-void twiWriteByte(uint8_t DATA, uint8_t type) {
+static void twiWriteByte(uint8_t DATA, uint8_t type) {
 	TWDR = DATA;
-	TWCR = _BV(TWINT) | _BV(TWEN);
-	while (!(TWCR & (1 << TWINT))) {}
-	if ((TWSR & 0xF8) != type)
-		error_led();
-}
-
-void twiAddr(uint8_t addr, uint8_t typeTWI) {
-	TWDR = addr;//send address
 	TWCR = _BV(TWINT) | _BV(TWEN);		/* clear interrupt to start transmission */
-	while ((TWCR & _BV(TWINT)) == 0);	/* wait for transmission */
-	if ((TWSR & 0xF8) != typeTWI)
-		error_led();
+	while (!(TWCR & (1 << TWINT)));		/* wait for transmission */
+	if ((TWSR & 0xF8) != type)
+		errorLed();
 }
-
 void wrReg(uint8_t reg, uint8_t dat) {
 	//send start condition
 	twiStart();
-	twiAddr(camAddr_WR, TW_MT_SLA_ACK);
+	twiWriteByte(OV7670_I2C_ADDRESS << 1, TW_MT_SLA_ACK);
 	twiWriteByte(reg, TW_MT_DATA_ACK);
 	twiWriteByte(dat, TW_MT_DATA_ACK);
 	TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWSTO);//send stop
 	_delay_ms(1);
 }
-
 static uint8_t twiRd(uint8_t nack) {
 	if (nack) {
 		TWCR = _BV(TWINT) | _BV(TWEN);
 		while ((TWCR & _BV(TWINT)) == 0);	/* wait for transmission */
 		if ((TWSR & 0xF8) != TW_MR_DATA_NACK)
-			error_led();
-		return TWDR;
+			errorLed();
 	}
 	else {
 		TWCR = _BV(TWINT) | _BV(TWEN) | _BV(TWEA);
 		while ((TWCR & _BV(TWINT)) == 0); /* wait for transmission */
 		if ((TWSR & 0xF8) != TW_MR_DATA_ACK)
-			error_led();
-		return TWDR;
+			errorLed();
 	}
+	return TWDR;
 }
-
 uint8_t rdReg(uint8_t reg) {
 	uint8_t dat;
 	twiStart();
-	twiAddr(camAddr_WR, TW_MT_SLA_ACK);
+	twiWriteByte(OV7670_I2C_ADDRESS << 1, TW_MT_SLA_ACK);
 	twiWriteByte(reg, TW_MT_DATA_ACK);
 	TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWSTO);//send stop
 	_delay_ms(1);
 	twiStart();
-	twiAddr(camAddr_RD, TW_MR_SLA_ACK);
+	twiWriteByte((OV7670_I2C_ADDRESS << 1) | 1, TW_MR_SLA_ACK);
 	dat = twiRd(1);
 	TWCR = (1 << TWINT) | (1 << TWEN) | (1 << TWSTO);//send stop
 	_delay_ms(1);
 	return dat;
 }
-
-void wrSensorRegs8_8(const struct regval_list reglist[]) {
-	uint8_t reg_addr, reg_val;
+static void wrSensorRegs8_8(const struct regval_list reglist[]) {
 	const struct regval_list *next = reglist;
-	while ((reg_addr != 0xff) | (reg_val != 0xff)) {
-		reg_addr = pgm_read_byte(&next->reg_num);
-		reg_val = pgm_read_byte(&next->value);
+	for (;;) {
+		uint8_t reg_addr = pgm_read_byte(&next->reg_num);
+		uint8_t reg_val = pgm_read_byte(&next->value);
+		if ((reg_addr == 255) && (reg_val == 255))
+			break;
 		wrReg(reg_addr, reg_val);
 		next++;
 	}
 }
-
-void setColor(void) {
-	wrSensorRegs8_8(yuv422_ov7670);
+void setColorSpace(enum COLORSPACE color) {
+	switch (color) {
+	case YUV422:
+		wrSensorRegs8_8(yuv422_ov7670);
+		break;
+	case RGB565:
+		wrSensorRegs8_8(rgb565_ov7670);
+		{uint8_t temp = rdReg(0x11);
+		_delay_ms(1);
+		wrReg(0x11, temp); }//according to the Linux kernel driver rgb565 PCLK needs rewriting
+		break;
+	case BAYER_RGB:
+		wrSensorRegs8_8(bayerRGB_ov7670);
+		break;
+	}
 }
-
-void setRes(void) {
-	wrReg(REG_COM3, 4);	// REG_COM3 enable scaling
-	wrSensorRegs8_8(qvga_ov7670);
+void setRes(enum RESOLUTION res) {
+	switch (res) {
+	case VGA:
+		wrReg(REG_COM3, 0);	// REG_COM3
+		wrSensorRegs8_8(vga_ov7670);
+		break;
+	case QVGA:
+		wrReg(REG_COM3, 4);	// REG_COM3 enable scaling
+		wrSensorRegs8_8(qvga_ov7670);
+		break;
+	case QQVGA:
+		wrReg(REG_COM3, 4);	// REG_COM3 enable scaling
+		wrSensorRegs8_8(qqvga_ov7670);
+		break;
+	}
 }
-
 void camInit(void) {
-	wrReg(0x12, 0x80);
+	wrReg(0x12, 0x80);//Reset the camera.
 	_delay_ms(100);
 	wrSensorRegs8_8(ov7670_default_regs);
 	wrReg(REG_COM10, 32);//PCLK does not toggle on HBLANK.
 }
 
-void arduinoUnoInut(void) {
-	cli();//disable interrupts
+/* Configuration: this lets you easily change between different resolutions
+* You must only uncomment one
+* no more no less*/
+#define useVga
+//#define useQvga
+//#define useQqvga
 
+static inline void serialWrB(uint8_t dat) {
+	while (!(UCSR0A & (1 << UDRE0)));//wait for byte to transmit
+	UDR0 = dat;
+	while (!(UCSR0A & (1 << UDRE0)));//wait for byte to transmit
+}
+static void StringPgm(const char * str) {
+	do {
+		serialWrB(pgm_read_byte_near(str));
+	} while (pgm_read_byte_near(++str));
+}
+
+static void captureImg(uint16_t wg, uint16_t hg) {
+	uint16_t lg2;
+#ifdef useQvga
+	uint8_t buf[640];
+#elif defined(useQqvga)
+	uint8_t buf[320];
+#endif
+	//StringPgm(PSTR("ASHISH"));
+	//Wait for vsync it is on pin 3 (counting from 0) portD
+	while (!(PIND & 8));//wait for high
+	while ((PIND & 8));//wait for low
+#ifdef useVga
+	int heightCount;
+	int widthCount;
+	while (hg--) {
+		lg2 = wg;
+		widthCount++;
+		while (lg2--) {
+			while ((PIND & 4));//wait for low
+			UDR0 = (PINC & 15) | (PIND & 240);
+			while (!(PIND & 4));//wait for high
+			heightCount++;
+		}
+	}
+#elif defined(useQvga)
+					   /*We send half of the line while reading then half later */
+	while (hg--) {
+		uint8_t*b = buf, *b2 = buf;
+		lg2 = wg / 2;
+		while (lg2--) {
+			while ((PIND & 4));//wait for low
+			*b++ = (PINC & 15) | (PIND & 240);
+			while (!(PIND & 4));//wait for high
+			while ((PIND & 4));//wait for low
+			*b++ = (PINC & 15) | (PIND & 240);
+			UDR0 = *b2++;
+			while (!(PIND & 4));//wait for high
+		}
+		/* Finish sending the remainder during blanking */
+		lg2 = wg / 2;
+		while (!(UCSR0A & (1 << UDRE0)));//wait for byte to transmit
+		while (lg2--) {
+			UDR0 = *b2++;
+			while (!(UCSR0A & (1 << UDRE0)));//wait for byte to transmit
+		}
+	}
+#else
+					   /* This code is very similar to qvga sending code except we have even more blanking time to take advantage of */
+	while (hg--) {
+		uint8_t*b = buf, *b2 = buf;
+		lg2 = wg / 5;
+		while (lg2--) {
+			while ((PIND & 4));//wait for low
+			*b++ = (PINC & 15) | (PIND & 240);
+			while (!(PIND & 4));//wait for high
+			while ((PIND & 4));//wait for low
+			*b++ = (PINC & 15) | (PIND & 240);
+			while (!(PIND & 4));//wait for high
+			while ((PIND & 4));//wait for low
+			*b++ = (PINC & 15) | (PIND & 240);
+			while (!(PIND & 4));//wait for high
+			while ((PIND & 4));//wait for low
+			*b++ = (PINC & 15) | (PIND & 240);
+			while (!(PIND & 4));//wait for high
+			while ((PIND & 4));//wait for low
+			*b++ = (PINC & 15) | (PIND & 240);
+			UDR0 = *b2++;
+			while (!(PIND & 4));//wait for high
+		}
+		/* Finish sending the remainder during blanking */
+		lg2 = 320 - (wg / 5);
+		while (!(UCSR0A & (1 << UDRE0)));//wait for byte to transmit
+		while (lg2--) {
+			UDR0 = *b2++;
+			while (!(UCSR0A & (1 << UDRE0)));//wait for byte to transmit
+		}
+	}
+#endif
+}
+
+void setup() {
+	cli();//disable interrupts
 		  /* Setup the 8mhz PWM clock
 		  * This will be on pin 11*/
 	DDRB |= (1 << 3);//pin 11
@@ -547,62 +403,52 @@ void arduinoUnoInut(void) {
 	DDRC &= ~15;//low d0-d3 camera
 	DDRD &= ~252;//d7-d4 and interrupt pins
 	_delay_ms(3000);
-
 	//set up twi for 100khz
 	TWSR &= ~3;//disable prescaler for TWI
 	TWBR = 72;//set to 100khz
-
 			  //enable serial
 	UBRR0H = 0;
-	UBRR0L = 1;//0 = 2M baud rate. 1 = 1M baud. 3 = 0.5M. 7 = 250k 207 is 9600 baud rate.
+	UBRR0L = 207;//0 = 2M baud rate. 1 = 1M baud. 3 = 0.5M. 7 = 250k 207 is 9600 baud rate.
 	UCSR0A |= 2;//double speed aysnc
 	UCSR0B = (1 << RXEN0) | (1 << TXEN0);//Enable receiver and transmitter
 	UCSR0C = 6;//async 1 stop bit 8bit char no parity bits
-}
-
-
-void StringPgm(const char * str) {
-	do {
-		while (!(UCSR0A & (1 << UDRE0)));//wait for byte to transmit
-		UDR0 = pgm_read_byte_near(str);
-		while (!(UCSR0A & (1 << UDRE0)));//wait for byte to transmit
-	} while (pgm_read_byte_near(++str));
-}
-
-static void captureImg(uint16_t wg, uint16_t hg) {
-	uint16_t y, x;
-
-	//StringPgm(PSTR("AM"));
-
-	while (!(PIND & 8));//wait for high
-	while ((PIND & 8));//wait for low
-
-	y = hg;
-	while (y--) {
-		x = wg;
-		//while (!(PIND & 256));//wait for high
-		while (x--) {
-			while ((PIND & 4));//wait for low
-			UDR0 = (PINC & 15) | (PIND & 240);
-			while (!(UCSR0A & (1 << UDRE0)));//wait for byte to transmit
-			while (!(PIND & 4));//wait for high
-			while ((PIND & 4));//wait for low
-			while (!(PIND & 4));//wait for high
-		}
-		//  while ((PIND & 256));//wait for low
-	}
-	_delay_ms(100);
-}
-
-void setup() {
-	arduinoUnoInut();
 	camInit();
-	setRes();
-	setColor();
+#ifdef useVga
+	setRes(VGA);
+	setColorSpace(BAYER_RGB);
+	wrReg(0x11, 25);
+#elif defined(useQvga)
+	setRes(QVGA);
+	setColorSpace(YUV422);
 	wrReg(0x11, 12);
+#else
+	setRes(QQVGA);
+	setColorSpace(YUV422);
+	wrReg(0x11, 3);
+#endif
 }
 
 
 void loop() {
-	captureImg(640, 480);
+	/* If you are not sure what value to use here for the divider (register 0x11)
+	* Values I have found to work raw vga 25 qqvga yuv422 12 qvga yuv422 21
+	* run the commented out test below and pick the smallest value that gets a correct image */
+
+		while (1) {
+		/* captureImg operates in bytes not pixels in some cases pixels are two bytes per pixel
+		* So for the width (if you were reading 640x480) you would put 1280 if you are reading yuv422 or rgb565 */
+		/*uint8_t x=63;//Uncomment this block to test divider settings note the other line you need to uncomment
+		do{
+		wrReg(0x11,x);
+		_delay_ms(1000);*/
+#ifdef useVga
+		captureImg(640, 480);
+#elif defined(useQvga)
+		captureImg(320 * 2, 240);
+#else
+		captureImg(160 * 2, 120);
+#endif
+		//}while(--x);//Uncomment this line to test divider settings
+	
+	}
 }

@@ -14,6 +14,7 @@ using System.Windows.Forms;
 using System.Diagnostics;
 using System.IO;
 using Newtonsoft.Json;
+using System.Threading;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 
@@ -22,16 +23,17 @@ namespace SerialPortMonitor
     public partial class Form1 : Form
     {
         string selectedPortName = null;
-        Timer timer = new Timer();
+        System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
         SerialPort monitorPort = null;
         Button startButton = null;
         Button stopButton = null;
         string imgPath = null;
         StringBuilder Base64StringSegments = new StringBuilder();
         bool isFirstFrame = true;
-        Dictionary<int,int> patternsTable = new Dictionary<int, int>();
+        Dictionary<int, int> patternsTable = new Dictionary<int, int>();
         int patternCounter = 0;
         List<byte> sBytes = new List<byte>();
+        byte[] imgBytes;
 
         public Form1()
         {
@@ -40,8 +42,8 @@ namespace SerialPortMonitor
 
         private void Form1_Load(object sender, EventArgs e)
         {
-            imgPath = (Environment.GetCommandLineArgs().Length>1)? Environment.GetCommandLineArgs()[1]: @"E:\PICTURES\2t.jpg";
-            
+            imgPath = (Environment.GetCommandLineArgs().Length > 1) ? Environment.GetCommandLineArgs()[1] : @"E:\PICTURES\2t.jpg";
+
             timer.Tick += Timer_Tick;
             timer.Interval = 10;
             string mcName = String.Format("{0}", Environment.MachineName);
@@ -54,20 +56,20 @@ namespace SerialPortMonitor
 
         private void Timer_Tick(object sender, EventArgs e)
         {
-            
+
         }
 
         private void PopulateAllSerialPorts()
         {
-             foreach (String portName in System.IO.Ports.SerialPort.GetPortNames())
-             {
+            foreach (String portName in System.IO.Ports.SerialPort.GetPortNames())
+            {
                 comboBox1.Items.Add(portName);
-             }
+            }
         }
 
         private void SetupPortProps(SerialPort port)
         {
-            port.BaudRate = 2000000;
+            port.BaudRate = 9600;
             port.DataBits = 8;
         }
 
@@ -91,45 +93,30 @@ namespace SerialPortMonitor
                 //this.Invoke(new MethodInvoker(delegate {
                 //    label3.Text = String.Format("Data stream received at - {0}", DateTime.Now.ToLongTimeString());
                 //}));
-                
-                SerialPort senderPort = (SerialPort)sender;
-                int bytes = senderPort.BytesToRead;
-                byte[] buffer = new byte[bytes];
-                senderPort.Read(buffer, 0, bytes);
-                HandleSerialData(buffer);
+                serialEvent((SerialPort)sender);
+
+                //SerialPort senderPort = (SerialPort)sender;
+                //int bytes = senderPort.BytesToRead;
+                //byte[] buffer = new byte[bytes];
+                //senderPort.Read(buffer, 0, bytes);
+                //sBytes.AddRange(buffer);
+                //Debug.Print("Buffer Size = " + sBytes.Count);
+                //HandleSerialData(buffer);
                 return;
             }
         }
 
-
-        int search(byte[] haystack, byte[] needle)
+        void serialEvent(SerialPort port)
         {
-            for (int i = 0; i <= haystack.Length - needle.Length; i++)
+            SerialPort senderPort = (SerialPort)port;
+            byte[] buffer = new byte[senderPort.ReadBufferSize];
+            senderPort.Read(buffer, 0, senderPort.ReadBufferSize);
+            sBytes.AddRange(buffer);
+            if (sBytes.Count > 307200)
             {
-                if (match(haystack, needle, i))
-                {
-                    return i;
-                }
-            }
-            return -1;
-        }
-
-        bool match(byte[] haystack, byte[] needle, int start)
-        {
-            if (needle.Length + start > haystack.Length)
-            {
-                return false;
-            }
-            else
-            {
-                for (int i = 0; i < needle.Length; i++)
-                {
-                    if (needle[i] != haystack[i + start])
-                    {
-                        return false;
-                    }
-                }
-                return true;
+                byte[] jpegBuffer = new byte[307200];
+                jpegBuffer = sBytes.Take(jpegBuffer.Count()).ToArray();
+                DumpFrame(jpegBuffer);
             }
         }
 
@@ -147,21 +134,22 @@ namespace SerialPortMonitor
                 {
                     AFound = true;
                 }
-                if ((b == 77) & (AFound)){
+                if ((b == 77) & (AFound))
+                {
                     PatternFound = true;
                     patternCounter++;
-                    newFrameMarker = counter+3;
+                    newFrameMarker = counter + 3;
                     break;
                 }
                 counter++;
             }
 
-            if ((PatternFound)&(patternCounter<1))
+            if ((PatternFound) & (patternCounter < 1))
             {
                 sBytes.Clear();
                 sBytes.AddRange(buffer.Skip(2));
             }
-            else if ((!PatternFound) & (patternCounter >0))
+            else if ((!PatternFound) & (patternCounter > 0))
             {
                 sBytes.AddRange(buffer);
             }
@@ -174,7 +162,7 @@ namespace SerialPortMonitor
                 patternCounter = 0;
             }
 
-             ////----------------------------------------------------------------------------------------------
+            ////----------------------------------------------------------------------------------------------
             //Debug.Print("Buffer Size = " + buffer.Length);
             //if (PatternFound)
             //{
@@ -225,17 +213,31 @@ namespace SerialPortMonitor
         {
             Debug.Print("Bitmap Buffer Size = " + sBytes.Length);
             Bitmap bmp = ImageFromArray(sBytes, 640, 480);
-            //bmp.Save("DEMO-" + DateTime.Now.ToLongTimeString() + ".jpg", ImageFormat.Jpeg);
-            pictureBox1.Image = bmp;
+            
+            int x, y;
+            // Loop through the images pixels to reset color.
+            for (x = bmp.Width-1; x >= 0; x--)
+            {
+                for (y = bmp.Height-1; y >= 0; y--)
+                {
+                    Color pixelColor = bmp.GetPixel(x, y);
+                    Color newColor = Color.FromArgb(pixelColor.R, pixelColor.G, pixelColor.B);
+                    bmp.SetPixel(x, y, newColor);
+                }
+            }
+
+            // Set the PictureBox to display the image.
+            pictureBox1.Image = Image.FromFile(@"G:\OneDrive\Arduino_Workspace\640_480_best.jpg");
         }
 
         Bitmap ImageFromArray(byte[] data, int width, int height)
         {
-            Bitmap bmp = new Bitmap(width, height, PixelFormat.Format8bppIndexed);
+            Bitmap b2 = new Bitmap(@"G:\OneDrive\Arduino_Workspace\640_480_best.jpg");
+            Bitmap bmp = new Bitmap(width, height, PixelFormat.Format16bppRgb565);
             //Create a BitmapData and Lock all pixels to be written 
-            BitmapData bmpData = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height),ImageLockMode.WriteOnly, bmp.PixelFormat);
+            BitmapData bmpData = bmp.LockBits(new Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.WriteOnly, bmp.PixelFormat);
             //Copy the data from the byte array into BitmapData.Scan0
-            Marshal.Copy(data, 0, bmpData.Scan0, data.Length);
+            Marshal.Copy(data, 0, bmpData.Scan0, data.Length );
             //Unlock the pixels
             bmp.UnlockBits(bmpData);
             //Return the bitmap 
@@ -299,16 +301,25 @@ namespace SerialPortMonitor
 
         private void btnTest_Click(object sender, EventArgs e)
         {
-            string encString = GetBase64EncodedString(File.ReadAllBytes(imgPath));
-            FileInfo fInfo = new FileInfo(imgPath);
-            if (!Directory.Exists(Path.Combine(fInfo.Directory.ToString(), "proc")))
-            {
-                Directory.CreateDirectory(Path.Combine(fInfo.Directory.ToString(), "proc"));
-            }
-            File.WriteAllText(Path.Combine(fInfo.Directory.ToString(), "proc","encoded.txt"), encString);
-            //--------------------------------------------------------------------------------------
+            ReadTestImage(@"G:\OneDrive\Arduino_Workspace\640_480_best.jpg");
+            
+            
+            //string encString = GetBase64EncodedString(File.ReadAllBytes(imgPath));
+            //FileInfo fInfo = new FileInfo(imgPath);
+            //if (!Directory.Exists(Path.Combine(fInfo.Directory.ToString(), "proc")))
+            //{
+            //    Directory.CreateDirectory(Path.Combine(fInfo.Directory.ToString(), "proc"));
+            //}
+            //File.WriteAllText(Path.Combine(fInfo.Directory.ToString(), "proc", "encoded.txt"), encString);
+            ////--------------------------------------------------------------------------------------
 
-            File.WriteAllBytes(Path.Combine(fInfo.Directory.ToString(), "proc", "encoded.jpg"), GetBase64DecodedData(File.ReadAllText(Path.Combine(fInfo.Directory.ToString(), "proc", "encoded.txt"))));
+            //File.WriteAllBytes(Path.Combine(fInfo.Directory.ToString(), "proc", "encoded.jpg"), GetBase64DecodedData(File.ReadAllText(Path.Combine(fInfo.Directory.ToString(), "proc", "encoded.txt"))));
+        }
+
+        private void ReadTestImage(string imgPath)
+        {
+            imgBytes = File.ReadAllBytes(imgPath);
+            DumpFrame(imgBytes);
         }
 
         private void ProcessJsonSegments(string rawDataReceived, StringBuilder Base64StringSegmentsInt)
@@ -331,60 +342,5 @@ namespace SerialPortMonitor
             //}
         }
 
-        public void DoneJpegRead(byte[] data)
-        {
-            try
-            {
-                MemoryStream memstream = new MemoryStream(data);
-
-                JpegBitmapDecoder decoder = new JpegBitmapDecoder(memstream, BitmapCreateOptions.None, BitmapCacheOption.Default);
-                MainImage.Source = decoder.Frames[0];
-            }
-            catch (System.Exception e)
-            {
-            }
-        }
-
-        public void DoPortThread()
-        {
-            //open serial port
-            SerialPort port = new SerialPort("COM3", 9600);
-            port.Open();
-
-            //clear any bytes waiting in it
-            while (port.BytesToRead > 0)
-                port.ReadByte();
-
-            byte[] buff = null;
-            while (true)
-            {
-                port.Write(new byte[] { 0 }, 0, 1);
-
-                string val = port.ReadLine().Trim();
-                System.Diagnostics.Debug.WriteLine(val);
-                if (val == "Size")
-                {
-                    int size = Convert.ToInt32(port.ReadLine().Trim());
-                    buff = new byte[size];
-                }
-                else if (val == "Data")
-                {
-                    int idx = 0;
-                    int lastdisplay = 0;
-                    System.Diagnostics.Debug.WriteLine("Reading " + buff.Length.ToString() + " bytes");
-                    while (idx < buff.Length)
-                    {
-                        idx += port.Read(buff, idx, buff.Length - idx);
-                        if (idx > (lastdisplay + 1))
-                        {
-                            lastdisplay = idx;
-                        }
-                    }
-                    Dispatcher.Invoke(new Action(delegate { DoneJpegRead(buff); }), new object[] { });
-                }
-            }
-
-            port.Close();
-        }
     }
 }
