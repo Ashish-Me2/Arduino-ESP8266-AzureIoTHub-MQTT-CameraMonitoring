@@ -69,7 +69,7 @@ namespace SerialPortMonitor
 
         private void SetupPortProps(SerialPort port)
         {
-            port.BaudRate = 9600;
+            port.BaudRate = 1000000;
             port.DataBits = 8;
         }
 
@@ -93,15 +93,15 @@ namespace SerialPortMonitor
                 //this.Invoke(new MethodInvoker(delegate {
                 //    label3.Text = String.Format("Data stream received at - {0}", DateTime.Now.ToLongTimeString());
                 //}));
-                serialEvent((SerialPort)sender);
 
-                //SerialPort senderPort = (SerialPort)sender;
+
+                SerialPort senderPort = (SerialPort)sender;
                 //int bytes = senderPort.BytesToRead;
                 //byte[] buffer = new byte[bytes];
                 //senderPort.Read(buffer, 0, bytes);
-                //sBytes.AddRange(buffer);
+                sBytes.AddRange(Encoding.ASCII.GetBytes(senderPort.ReadExisting()));
                 //Debug.Print("Buffer Size = " + sBytes.Count);
-                //HandleSerialData(buffer);
+                DumpFrame(sBytes.ToArray());
                 return;
             }
         }
@@ -209,25 +209,32 @@ namespace SerialPortMonitor
             //}
         }
 
-        private void DumpFrame(byte[] sBytes)
+        private void DumpFrame(byte[] imgBytes)
         {
-            Debug.Print("Bitmap Buffer Size = " + sBytes.Length);
-            Bitmap bmp = ImageFromArray(sBytes, 640, 480);
-            
-            int x, y;
-            // Loop through the images pixels to reset color.
-            for (x = bmp.Width-1; x >= 0; x--)
+            //Debug.Print("Bitmap Buffer Size = " + imgBytes.Length);
+            int width = 640;
+            int height = 480;
+            int multiplier = width * height * 3;
+            if (sBytes.Count() > multiplier)
             {
-                for (y = bmp.Height-1; y >= 0; y--)
-                {
-                    Color pixelColor = bmp.GetPixel(x, y);
-                    Color newColor = Color.FromArgb(pixelColor.R, pixelColor.G, pixelColor.B);
-                    bmp.SetPixel(x, y, newColor);
-                }
-            }
+                byte[] temp = sBytes.Take(multiplier).ToArray();
+                byte[] imageData = new byte[multiplier];
+                sBytes.RemoveRange(0, multiplier);
+                //Here create the Bitmap to the know height, width and format
+                //Bitmap bmp = new Bitmap(width, height, PixelFormat.Format16bppRgb555);
 
-            // Set the PictureBox to display the image.
-            pictureBox1.Image = Image.FromFile(@"G:\OneDrive\Arduino_Workspace\640_480_best.jpg");
+                ////Create a BitmapData and Lock all pixels to be written 
+                //BitmapData bmpData = bmp.LockBits(
+                //new Rectangle(0, 0, bmp.Width, bmp.Height),
+                //ImageLockMode.ReadWrite, bmp.PixelFormat);
+
+                ////Copy the data from the byte array into BitmapData.Scan0
+                //Marshal.Copy(temp, 0, bmpData.Scan0, imageData.Length);
+                ////Unlock the pixels
+                //bmp.UnlockBits(bmpData);
+                //pictureBox1.Image = bmp;
+                pictureBox1.Image = Image.FromStream(new MemoryStream(temp),true);
+            }
         }
 
         Bitmap ImageFromArray(byte[] data, int width, int height)
