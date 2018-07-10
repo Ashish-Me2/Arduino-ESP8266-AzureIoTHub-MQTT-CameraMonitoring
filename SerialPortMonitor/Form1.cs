@@ -69,7 +69,7 @@ namespace SerialPortMonitor
 
         private void SetupPortProps(SerialPort port)
         {
-            port.BaudRate = 1000000;
+            port.BaudRate = 9600;
             port.DataBits = 8;
         }
 
@@ -88,22 +88,27 @@ namespace SerialPortMonitor
 
         private void MonitorPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
-            if (InvokeRequired)
-            {
-                //this.Invoke(new MethodInvoker(delegate {
-                //    label3.Text = String.Format("Data stream received at - {0}", DateTime.Now.ToLongTimeString());
-                //}));
+            SerialPort senderPort = (SerialPort)sender;
+            //int bytes = senderPort.BytesToRead;
+            //byte[] buffer = new byte[bytes];
+            Debug.Write(senderPort.ReadExisting());
+
+            //if (InvokeRequired)
+            //{
+            //    //this.Invoke(new MethodInvoker(delegate {
+            //    //    label3.Text = String.Format("Data stream received at - {0}", DateTime.Now.ToLongTimeString());
+            //    //}));
 
 
-                SerialPort senderPort = (SerialPort)sender;
-                //int bytes = senderPort.BytesToRead;
-                //byte[] buffer = new byte[bytes];
-                //senderPort.Read(buffer, 0, bytes);
-                sBytes.AddRange(Encoding.ASCII.GetBytes(senderPort.ReadExisting()));
-                //Debug.Print("Buffer Size = " + sBytes.Count);
-                DumpFrame(sBytes.ToArray());
-                return;
-            }
+            //    SerialPort senderPort = (SerialPort)sender;
+            //    //int bytes = senderPort.BytesToRead;
+            //    //byte[] buffer = new byte[bytes];
+            //    //senderPort.Read(buffer, 0, bytes);
+            //    sBytes.AddRange(Encoding.ASCII.GetBytes(senderPort.ReadExisting()));
+            //    //Debug.Print("Buffer Size = " + sBytes.Count);
+            //    DumpFrame(sBytes.ToArray());
+            //    return;
+            //}
         }
 
         void serialEvent(SerialPort port)
@@ -214,26 +219,26 @@ namespace SerialPortMonitor
             //Debug.Print("Bitmap Buffer Size = " + imgBytes.Length);
             int width = 640;
             int height = 480;
-            int multiplier = width * height * 3;
+            int multiplier = width * height ;
             if (sBytes.Count() > multiplier)
             {
                 byte[] temp = sBytes.Take(multiplier).ToArray();
                 byte[] imageData = new byte[multiplier];
                 sBytes.RemoveRange(0, multiplier);
                 //Here create the Bitmap to the know height, width and format
-                //Bitmap bmp = new Bitmap(width, height, PixelFormat.Format16bppRgb555);
+                Bitmap bmp = new Bitmap(width, height, PixelFormat.Format16bppRgb555);
 
                 ////Create a BitmapData and Lock all pixels to be written 
-                //BitmapData bmpData = bmp.LockBits(
-                //new Rectangle(0, 0, bmp.Width, bmp.Height),
-                //ImageLockMode.ReadWrite, bmp.PixelFormat);
+                BitmapData bmpData = bmp.LockBits(
+                new Rectangle(0, 0, bmp.Width, bmp.Height),
+                ImageLockMode.ReadWrite, bmp.PixelFormat);
 
                 ////Copy the data from the byte array into BitmapData.Scan0
-                //Marshal.Copy(temp, 0, bmpData.Scan0, imageData.Length);
+                Marshal.Copy(temp, 0, bmpData.Scan0, imageData.Length);
                 ////Unlock the pixels
-                //bmp.UnlockBits(bmpData);
-                //pictureBox1.Image = bmp;
-                pictureBox1.Image = Image.FromStream(new MemoryStream(temp),true);
+                bmp.UnlockBits(bmpData);
+                pictureBox1.Image = bmp;
+                
             }
         }
 
