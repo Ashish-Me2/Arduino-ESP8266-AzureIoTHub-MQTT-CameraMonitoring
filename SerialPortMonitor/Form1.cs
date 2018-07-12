@@ -71,6 +71,39 @@ namespace SerialPortMonitor
         {
             port.BaudRate = 9600;
             port.DataBits = 8;
+            HandlePort(port);
+        }
+
+        private void HandlePort(SerialPort port)
+        {
+            bool markerFound = false;
+            List<int> markPos = new List<int>();
+            int counter = 0;
+            StringBuilder sb = new StringBuilder();
+            while (true)
+            {
+                if ((port.IsOpen)&&(port.BytesToRead > 0))
+                {
+                    string data = port.ReadExisting();
+                    if (data.Contains("*RDY*"))
+                    {
+                        counter++;
+                    }
+                    sb.Append(data);
+                    Thread.Sleep(50);
+                    if (counter > 2)
+                    {
+                        string _temp = sb.ToString();
+                        int pos1 = _temp.IndexOf("*RDY*");
+                        int pos2 = _temp.IndexOf("*RDY*", pos1+4);
+                        string _data = _temp.Substring(pos1 + 5, pos2);
+                    }
+                }
+                else
+                {
+                    if (!port.IsOpen) port.Open();
+                }
+            }
         }
 
         private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
@@ -88,135 +121,10 @@ namespace SerialPortMonitor
 
         private void MonitorPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
         {
-            SerialPort senderPort = (SerialPort)sender;
-            //int bytes = senderPort.BytesToRead;
-            //byte[] buffer = new byte[bytes];
-            Debug.Write(senderPort.ReadExisting());
-
-            //if (InvokeRequired)
-            //{
-            //    //this.Invoke(new MethodInvoker(delegate {
-            //    //    label3.Text = String.Format("Data stream received at - {0}", DateTime.Now.ToLongTimeString());
-            //    //}));
-
-
-            //    SerialPort senderPort = (SerialPort)sender;
-            //    //int bytes = senderPort.BytesToRead;
-            //    //byte[] buffer = new byte[bytes];
-            //    //senderPort.Read(buffer, 0, bytes);
-            //    sBytes.AddRange(Encoding.ASCII.GetBytes(senderPort.ReadExisting()));
-            //    //Debug.Print("Buffer Size = " + sBytes.Count);
-            //    DumpFrame(sBytes.ToArray());
-            //    return;
-            //}
-        }
-
-        void serialEvent(SerialPort port)
-        {
-            SerialPort senderPort = (SerialPort)port;
-            byte[] buffer = new byte[senderPort.ReadBufferSize];
-            senderPort.Read(buffer, 0, senderPort.ReadBufferSize);
-            sBytes.AddRange(buffer);
-            if (sBytes.Count > 307200)
-            {
-                byte[] jpegBuffer = new byte[307200];
-                jpegBuffer = sBytes.Take(jpegBuffer.Count()).ToArray();
-                DumpFrame(jpegBuffer);
-            }
-        }
-
-
-        private void HandleSerialData(byte[] buffer)
-        {
-            byte[] needle = new byte[] { 65, 77 };
-            bool AFound = false;
-            bool PatternFound = false;
-            int newFrameMarker = 0;
-            int counter = 0;
-            foreach (byte b in buffer)
-            {
-                if (b == 65)
-                {
-                    AFound = true;
-                }
-                if ((b == 77) & (AFound))
-                {
-                    PatternFound = true;
-                    patternCounter++;
-                    newFrameMarker = counter + 3;
-                    break;
-                }
-                counter++;
-            }
-
-            if ((PatternFound) & (patternCounter < 1))
-            {
-                sBytes.Clear();
-                sBytes.AddRange(buffer.Skip(2));
-            }
-            else if ((!PatternFound) & (patternCounter > 0))
-            {
-                sBytes.AddRange(buffer);
-            }
-            else if ((PatternFound) & (patternCounter > 1))
-            {
-                byte[] oldFrame = buffer.Take(newFrameMarker - 3).ToArray();
-                sBytes.AddRange(oldFrame);
-                DumpFrame(sBytes.ToArray());
-                sBytes.Clear();
-                patternCounter = 0;
-            }
-
-            ////----------------------------------------------------------------------------------------------
-            //Debug.Print("Buffer Size = " + buffer.Length);
-            //if (PatternFound)
-            //{
-            //    Debug.Print("PATTERN FOUND");
-            //    byte[] oldFrame = buffer.Take(newFrameMarker - 3).ToArray();
-            //    byte[] newFrame = buffer.Skip(newFrameMarker).ToArray();
-
-            //    //YES: This is the 1st frame being processed. Now setting the flag to false for subsequent frames
-            //    //Start with new byte array
-            //    if (isFirstFrame)
-            //    {
-            //        Debug.Print("1st FRAME");
-            //        sBytes.Clear();
-            //        //Add whatever is available after the AM marker
-            //        sBytes.AddRange(newFrame);
-            //        Debug.Print("Added NEW frame");
-            //    }
-            //    else
-            //    {
-            //        Debug.Print("NOT 1st FRAME");
-            //        sBytes.AddRange(oldFrame);
-            //        Debug.Print("Added OLD frame");
-            //        DumpFrame(sBytes.ToArray());
-            //        sBytes.Clear();
-            //        sBytes.AddRange(newFrame);
-            //        Debug.Print("DUMP IMAGE");
-            //        Debug.Print("ALL CLEAR");
-            //        Debug.Print("Added NEW frame");
-            //    }
-            //    isFirstFrame = false;
-            //}
-            //else
-            //{
-            //    Debug.Print("NO PATTERN FOUND");
-            //    if (!isFirstFrame)
-            //    {
-            //        Debug.Print("NOT the 1st FRAME");
-            //        sBytes.AddRange(buffer);
-            //        Debug.Print("Added COMPLETE BUFFER");
-            //    }
-            //    {
-            //        Debug.Print("1st FRAME. Doing Nothing");
-            //    }
-            //}
         }
 
         private void DumpFrame(byte[] imgBytes)
         {
-            //Debug.Print("Bitmap Buffer Size = " + imgBytes.Length);
             int width = 640;
             int height = 480;
             int multiplier = width * height ;
@@ -226,7 +134,7 @@ namespace SerialPortMonitor
                 byte[] imageData = new byte[multiplier];
                 sBytes.RemoveRange(0, multiplier);
                 //Here create the Bitmap to the know height, width and format
-                Bitmap bmp = new Bitmap(width, height, PixelFormat.Format16bppRgb555);
+                Bitmap bmp = new Bitmap(width, height, PixelFormat.Gdi);
 
                 ////Create a BitmapData and Lock all pixels to be written 
                 BitmapData bmpData = bmp.LockBits(
@@ -238,7 +146,6 @@ namespace SerialPortMonitor
                 ////Unlock the pixels
                 bmp.UnlockBits(bmpData);
                 pictureBox1.Image = bmp;
-                
             }
         }
 

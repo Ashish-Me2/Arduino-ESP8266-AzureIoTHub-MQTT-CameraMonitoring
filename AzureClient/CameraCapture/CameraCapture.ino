@@ -488,7 +488,7 @@ static void captureImg(uint16_t wg, uint16_t hg) {
 #elif defined(useQqvga)
 	uint8_t buf[320];
 #endif
-	StringPgm(PSTR("RDY"));
+	StringPgm(PSTR("*RDY*"));
 	//Wait for vsync it is on pin 3 (counting from 0) portD
 	while (!(PIND & 8));//wait for high
 	while ((PIND & 8));//wait for low
@@ -581,8 +581,8 @@ void setup() {
 	camInit();
 #ifdef useVga
 	setRes(VGA);
-	setColorSpace(BAYER_RGB);
-	wrReg(0x11, 25);
+	setColorSpace(YUV422);
+	wrReg(0x11, 9);
 #elif defined(useQvga)
 	setRes(QVGA);
 	setColorSpace(YUV422);
